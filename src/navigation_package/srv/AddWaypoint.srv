@@ -1,0 +1,5 @@
+geometry_msgs/Point point
+---
+bool success
+int32 index
+string message
