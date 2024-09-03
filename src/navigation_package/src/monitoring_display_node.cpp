@@ -5,6 +5,7 @@
 
 #include <websocketpp/config/asio_no_tls_client.hpp>
 #include <websocketpp/client.hpp>
+#include "nlohmann/json.hpp"  // Correct include for nlohmann::json
 
 typedef websocketpp::client<websocketpp::config::asio_client> websocket_client;
 
@@ -62,23 +63,27 @@ private:
     void distance_callback(const std_msgs::msg::Float32::SharedPtr msg)
     {
         RCLCPP_INFO(this->get_logger(), "Distance to waypoint: %f meters", msg->data);
-        send_to_websocket("Distance to waypoint: " + std::to_string(msg->data) + " meters");
+        send_to_websocket("distance", msg->data);
     }
 
     void direction_callback(const std_msgs::msg::Float32::SharedPtr msg)
     {
         RCLCPP_INFO(this->get_logger(), "Direction to waypoint: %f degrees", msg->data);
-        send_to_websocket("Direction to waypoint: " + std::to_string(msg->data) + " degrees");
+        send_to_websocket("direction", msg->data);
     }
 
     void remaining_waypoints_callback(const std_msgs::msg::Int32::SharedPtr msg)
     {
         RCLCPP_INFO(this->get_logger(), "Remaining waypoints: %d", msg->data);
-        send_to_websocket("Remaining waypoints: " + std::to_string(msg->data));
+        send_to_websocket("remaining_waypoints", static_cast<float>(msg->data));
     }
 
-    void send_to_websocket(const std::string &message)
+    void send_to_websocket(const std::string &key, float value)
     {
+        nlohmann::json data;
+        data[key] = value;
+        std::string message = data.dump();  // Convert JSON object to string
+
         websocketpp::lib::error_code ec;
         ws_client_.send(ws_hdl_, message, websocketpp::frame::opcode::text, ec);
         if (ec)

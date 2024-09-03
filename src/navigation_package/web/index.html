@@ -3,16 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROS 2 Data</title>
+    <title>ROS 2 Data Monitoring</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        #data-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80%;
+            max-width: 600px;
+        }
+
+        .data-item {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .data-item span {
+            font-weight: bold;
+            color: #444;
+        }
+
+        .data-item .value {
+            font-size: 1.2em;
+            color: #007bff;
+        }
+
+        footer {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #777;
+        }
+    </style>
 </head>
 <body>
-    <h1>ROS 2 Data</h1>
-    <div id="data"></div>
+    <h1>ROS 2 Data Monitoring</h1>
+    <div id="data-container">
+        <div class="data-item">
+            <span>Distance to Waypoint:</span>
+            <span class="value" id="distance">Waiting for data...</span>
+        </div>
+        <div class="data-item">
+            <span>Direction to Waypoint:</span>
+            <span class="value" id="direction">Waiting for data...</span>
+        </div>
+        <div class="data-item">
+            <span>Remaining Waypoints:</span>
+            <span class="value" id="remaining-waypoints">Waiting for data...</span>
+        </div>
+    </div>
+
+    <footer>
+        Data is updated in real-time from the ROS 2 system.
+    </footer>
 
     <script>
         const ws = new WebSocket('ws://localhost:9002');
+
         ws.onmessage = function(event) {
-            document.getElementById('data').textContent = 'Data: ' + event.data;
+            const data = JSON.parse(event.data);
+
+            if (data.distance !== undefined) {
+                document.getElementById('distance').textContent = `${data.distance.toFixed(2)} meters`;
+            }
+            if (data.direction !== undefined) {
+                document.getElementById('direction').textContent = `${data.direction.toFixed(2)} degrees`;
+            }
+            if (data.remaining_waypoints !== undefined) {
+                document.getElementById('remaining-waypoints').textContent = `${data.remaining_waypoints}`;
+            }
+        };
+
+        ws.onerror = function(error) {
+            console.error("WebSocket Error:", error);
+            alert("WebSocket connection error. Check the console for more details.");
+        };
+
+        ws.onclose = function() {
+            alert("WebSocket connection closed.");
         };
     </script>
 </body>
