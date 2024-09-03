@@ -12,30 +12,33 @@ find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
-# Déclarez les exécutables avant d'ajouter les interfaces ROSIDL
+# Include websocketpp headers
+include_directories(/usr/local/include)
+
+# Declare executables before adding ROSIDL interfaces
 add_executable(gps_tracker_node src/gps_tracker_node.cpp)
 add_executable(waypoint_manager_node src/waypoint_manager_node.cpp)
 add_executable(navigation_calculator_node src/navigation_calculator_node.cpp)
 add_executable(monitoring_display_node src/monitoring_display_node.cpp)
 
-# Ajoutez les dépendances pour chaque cible
+# Add dependencies for each target
 ament_target_dependencies(gps_tracker_node rclcpp std_msgs geometry_msgs)
 ament_target_dependencies(waypoint_manager_node rclcpp std_srvs std_msgs geometry_msgs)
 ament_target_dependencies(navigation_calculator_node rclcpp std_msgs geometry_msgs)
 ament_target_dependencies(monitoring_display_node rclcpp std_msgs geometry_msgs)
 
-# Générez les interfaces ROSIDL et liez-les avec les cibles appropriées
+# Generate ROSIDL interfaces and link them with appropriate targets
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/AddWaypoint.srv"
   "srv/RemoveWaypoint.srv"  
   DEPENDENCIES geometry_msgs std_msgs
 )
 
-# Lier les interfaces ROSIDL avec la cible waypoint_manager_node
+# Link ROSIDL interfaces with the waypoint_manager_node target
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(waypoint_manager_node ${cpp_typesupport_target})
 
-# Installation des exécutables
+# Install the executables
 install(TARGETS
   gps_tracker_node
   waypoint_manager_node
