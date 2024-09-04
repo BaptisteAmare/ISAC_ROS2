@@ -1,0 +1,5 @@
+int32 index
+geometry_msgs/Point coordinates
+float32 distance_to_next_waypoint
+float32 direction_to_next_waypoint
+string status

@@ -22,6 +22,23 @@
             margin-bottom: 20px;
         }
 
+        #status {
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        #status.connected {
+            background-color: #28a745;
+            color: white;
+        }
+
+        #status.disconnected {
+            background-color: #dc3545;
+            color: white;
+        }
+
         #data-container {
             display: flex;
             flex-direction: column;
@@ -50,27 +67,51 @@
             color: #007bff;
         }
 
+        .data-item.old .value {
+            color: #ff9933;
+        }
+
         footer {
             margin-top: 20px;
             font-size: 0.9em;
             color: #777;
         }
+
+        pre {
+            background-color: #eee;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
     </style>
 </head>
 <body>
     <h1>ROS 2 Data Monitoring</h1>
+    <div id="status" class="disconnected">Disconnected</div>
     <div id="data-container">
-        <div class="data-item">
+        <div class="data-item" id="item-distance">
             <span>Distance to Waypoint:</span>
             <span class="value" id="distance">Waiting for data...</span>
         </div>
-        <div class="data-item">
+        <div class="data-item" id="item-direction">
             <span>Direction to Waypoint:</span>
             <span class="value" id="direction">Waiting for data...</span>
         </div>
-        <div class="data-item">
+        <div class="data-item" id="item-remaining-waypoints">
             <span>Remaining Waypoints:</span>
             <span class="value" id="remaining-waypoints">Waiting for data...</span>
+        </div>
+        <div class="data-item" id="item-current-position">
+            <span>Current Position:</span>
+            <span class="value" id="current-position">Waiting for data...</span>
+        </div>
+        <div class="data-item" id="item-current-waypoint">
+            <span>Current Waypoint:</span>
+            <span class="value" id="current-waypoint">Waiting for data...</span>
+        </div>
+        <div class="data-item" id="item-all-waypoints">
+            <span>All Waypoints:</span>
+            <pre id="all-waypoints">Waiting for data...</pre>
         </div>
     </div>
 
@@ -79,30 +120,100 @@
     </footer>
 
     <script>
-        const ws = new WebSocket('ws://localhost:9002');
-
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-
-            if (data.distance !== undefined) {
-                document.getElementById('distance').textContent = `${data.distance.toFixed(2)} meters`;
-            }
-            if (data.direction !== undefined) {
-                document.getElementById('direction').textContent = `${data.direction.toFixed(2)} degrees`;
-            }
-            if (data.remaining_waypoints !== undefined) {
-                document.getElementById('remaining-waypoints').textContent = `${data.remaining_waypoints}`;
-            }
+        let ws;
+        const statusElement = document.getElementById('status');
+        const lastMessageTimes = {
+            distance: 0,
+            direction: 0,
+            remaining_waypoints: 0,
+            current_position: 0,
+            current_waypoint: 0,
+            all_waypoints: 0
         };
 
-        ws.onerror = function(error) {
-            console.error("WebSocket Error:", error);
-            alert("WebSocket connection error. Check the console for more details.");
-        };
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:9002');
 
-        ws.onclose = function() {
-            alert("WebSocket connection closed.");
-        };
+            ws.onopen = function() {
+                statusElement.textContent = 'Connected';
+                statusElement.classList.remove('disconnected');
+                statusElement.classList.add('connected');
+            };
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                const now = Date.now();
+
+                if (data.distance !== undefined) {
+                    updateDataItem('item-distance', 'distance', data.distance.toFixed(2), ' meters');
+                    lastMessageTimes.distance = now;
+                }
+                if (data.direction !== undefined) {
+                    updateDataItem('item-direction', 'direction', data.direction.toFixed(2), ' degrees');
+                    lastMessageTimes.direction = now;
+                }
+                if (data.remaining_waypoints !== undefined) {
+                    updateDataItem('item-remaining-waypoints', 'remaining-waypoints', data.remaining_waypoints);
+                    lastMessageTimes.remaining_waypoints = now;
+                }
+                if (data.current_position !== undefined) {
+                    const pos = data.current_position;
+                    updateDataItem('item-current-position', 'current-position', `${pos.x.toFixed(5)}, ${pos.y.toFixed(5)}, ${pos.z.toFixed(2)}`);
+                    lastMessageTimes.current_position = now;
+                }
+                if (data.current_waypoint !== undefined) {
+                    const wp = data.current_waypoint;
+                    updateDataItem('item-current-waypoint', 'current-waypoint', `${wp.x.toFixed(5)}, ${wp.y.toFixed(5)}, ${wp.z.toFixed(2)}`);
+                    lastMessageTimes.current_waypoint = now;
+                }
+                if (data.all_waypoints !== undefined) {
+                    document.getElementById('all-waypoints').textContent = JSON.stringify(data.all_waypoints, null, 2);
+                    lastMessageTimes.all_waypoints = now;
+                }
+            };
+
+            ws.onerror = function(error) {
+                console.error("WebSocket Error:", error);
+                handleWebSocketClose();
+            };
+
+            ws.onclose = function() {
+                handleWebSocketClose();
+            };
+        }
+
+        function handleWebSocketClose() {
+            statusElement.textContent = 'Disconnected';
+            statusElement.classList.remove('connected');
+            statusElement.classList.add('disconnected');
+            setTimeout(connectWebSocket, 20000); // Retry connection every 20 seconds
+        }
+
+        function updateDataItem(dataItemId, valueId, value, unit = '') {
+            const item = document.getElementById(dataItemId);
+            const valueElement = document.getElementById(valueId);
+
+            item.classList.remove('old');
+            valueElement.textContent = `${value}${unit}`;
+        }
+
+        function checkDataFreshness() {
+            const now = Date.now();
+
+            for (let key in lastMessageTimes) {
+                const dataItem = document.getElementById(`item-${key}`);
+                if (now - lastMessageTimes[key] > 20000) {
+                    dataItem.classList.add('old');
+                } else {
+                    dataItem.classList.remove('old');
+                }
+            }
+        }
+
+        setInterval(checkDataFreshness, 1000);
+
+        // Start the initial WebSocket connection
+        connectWebSocket();
     </script>
 </body>
 </html>
