@@ -36,7 +36,10 @@ public:
         waypoint_info_publisher_ = this->create_publisher<navigation_package::msg::WaypointInfo>("navigation/waypoint_info", 10);
         waypoints_remaining_publisher_ = this->create_publisher<std_msgs::msg::Int32>("navigation/remaining_waypoints", 10);
         current_waypoint_publisher_ = this->create_publisher<geometry_msgs::msg::Point>("navigation/current_waypoint", 10);
-        waypoint_json_publisher_ = this->create_publisher<std_msgs::msg::String>("waypoint_json", 10);
+        mission_created_publisher_ = this->create_publisher<std_msgs::msg::String>("mission_created", 10);
+        mission_completed_publisher_ = this->create_publisher<std_msgs::msg::String>("mission_completed", 10);
+        waypoint_added_publisher_ = this->create_publisher<std_msgs::msg::String>("waypoint_added", 10);
+        waypoint_removed_publisher_ = this->create_publisher<std_msgs::msg::String>("waypoint_removed", 10);
 
         distance_subscriber_ = this->create_subscription<std_msgs::msg::Float32>(
             "navigation/distance_to_waypoint", 10, std::bind(&WaypointManagerNode::update_distance, this, std::placeholders::_1));
@@ -57,7 +60,9 @@ private:
         new_waypoint.coordinates = request->point;
         new_waypoint.status = "Waiting";
 
-        // Calculer distance et direction si ce n'est pas le premier waypoint
+        // Vérifie si c'est le premier waypoint ajouté (aucun waypoint présent)
+        bool is_first_waypoint = active_waypoints_.empty();
+
         if (!active_waypoints_.empty()) {
             WaypointInfo& previous_waypoint = active_waypoints_.back();
             new_waypoint.distance_to_next_waypoint = calculate_distance(
@@ -73,7 +78,7 @@ private:
 
         active_waypoints_.push_back(new_waypoint);
 
-        // Création du message JSON
+        // Création du message JSON pour le waypoint ajouté
         nlohmann::json json_msg;
         json_msg["index"] = new_waypoint.index;
         json_msg["coordinates"]["x"] = new_waypoint.coordinates.x;
@@ -83,10 +88,25 @@ private:
         json_msg["direction_to_next_waypoint"] = new_waypoint.direction_to_next_waypoint;
         json_msg["status"] = new_waypoint.status;
 
-        // Publier le message JSON sur le topic "waypoint_json"
+        // Publier le message JSON sur le topic "waypoint_added"
         std_msgs::msg::String json_msg_str;
         json_msg_str.data = json_msg.dump();
-        waypoint_json_publisher_->publish(json_msg_str);
+        waypoint_added_publisher_->publish(json_msg_str);
+        RCLCPP_INFO(this->get_logger(), "Waypoint added event published");
+
+        // Si c'est le premier waypoint, envoyer MissionCreatedEvent
+        if (is_first_waypoint) {
+            nlohmann::json mission_created_msg;
+            mission_created_msg["mission_id"] = "<unique_mission_id>";  // Remplacer par l'ID de la mission réelle
+            mission_created_msg["mission_name"] = "Test Mission";
+            mission_created_msg["created_at"] = "<timestamp>";  // Générer la date actuelle
+            mission_created_msg["first_waypoint"] = json_msg;
+
+            std_msgs::msg::String mission_created_str;
+            mission_created_str.data = mission_created_msg.dump();
+            mission_created_publisher_->publish(mission_created_str);
+            RCLCPP_INFO(this->get_logger(), "Mission created event published");
+        }
 
         // Réponse du service
         response->success = true;
@@ -115,7 +135,8 @@ private:
             // Publier le message JSON sur le topic "waypoint_json"
             std_msgs::msg::String json_msg_str;
             json_msg_str.data = json_msg.dump();
-            waypoint_json_publisher_->publish(json_msg_str);
+            waypoint_removed_publisher_->publish(json_msg_str);
+            RCLCPP_INFO(this->get_logger(), "Waypoint removed event published");
 
             response->success = true;
             response->message = "Waypoint Deleted";
@@ -191,31 +212,54 @@ private:
     void update_waypoint_status()
     {
         bool waypoint_in_progress = false;
+        bool mission_completed = true;
 
-        // Loop through all waypoints to update their status
+        // Boucle sur tous les waypoints pour mettre à jour leur statut
         for (auto& waypoint : active_waypoints_) {
-            // If the waypoint is already done, do not change its status
+            // Si le waypoint est déjà fait, ne changez pas son statut
             if (waypoint.status == "Done") {
                 continue;
             }
 
-            // Check distance to see if the waypoint should be marked as done
+            // Vérifie la distance pour voir si le waypoint doit être marqué comme fait
             if (waypoint.distance_to_next_waypoint < 5.0) {
                 waypoint.status = "Done";
                 RCLCPP_INFO(this->get_logger(), "Waypoint %d Done.", waypoint.index);
             }
-            // If no waypoint is in progress, set the first unfinished one to "Target"
+            // Si aucun waypoint n'est en cours, définis le premier non terminé à "Target"
             else if (!waypoint_in_progress) {
                 waypoint.status = "Target";
                 publish_current_waypoint(waypoint.coordinates);
-                waypoint_in_progress = true;  // A waypoint is now in progress
+                waypoint_in_progress = true;  // Un waypoint est maintenant en cours
             }
-            // All other waypoints remain in waiting status
+            // Tous les autres waypoints restent en attente
             else {
                 waypoint.status = "Waiting";
             }
+
+            // Si au moins un waypoint n'est pas terminé, la mission n'est pas terminée
+            if (waypoint.status != "Done") {
+                mission_completed = false;
+            }
+        }
+
+        // Si tous les waypoints sont terminés, publie l'événement "MissionCompleted" et retire les waypoints
+        if (mission_completed) {
+            nlohmann::json mission_completed_msg;
+            mission_completed_msg["mission_id"] = "<unique_mission_id>";  // Remplacer par l'ID de la mission réelle
+            mission_completed_msg["completed_at"] = "<timestamp>";  // Générer la date actuelle
+
+            std_msgs::msg::String mission_completed_str;
+            mission_completed_str.data = mission_completed_msg.dump();
+            mission_completed_publisher_->publish(mission_completed_str);
+            RCLCPP_INFO(this->get_logger(), "Mission completed event published");
+
+            // Retirer tous les waypoints une fois la mission complétée
+            active_waypoints_.clear();
+            RCLCPP_INFO(this->get_logger(), "All waypoints cleared after mission completion.");
         }
     }
+
 
     void publish_current_waypoint(const geometry_msgs::msg::Point& current_waypoint)
     {
@@ -260,7 +304,10 @@ private:
     rclcpp::Publisher<navigation_package::msg::WaypointInfo>::SharedPtr waypoint_info_publisher_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr waypoints_remaining_publisher_;
     rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr current_waypoint_publisher_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr waypoint_json_publisher_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mission_created_publisher_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mission_completed_publisher_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr waypoint_added_publisher_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr waypoint_removed_publisher_;
 
     rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr distance_subscriber_;
     rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr direction_subscriber_;
