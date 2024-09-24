@@ -10,8 +10,8 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
-
 find_package(nlohmann_json REQUIRED)
 
 
@@ -19,7 +19,7 @@ find_package(nlohmann_json REQUIRED)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/websocketpp)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/json)
 
-# Declare executables before adding ROSIDL interfaces
+# Declare executables
 add_executable(gps_tracker_node src/gps_tracker_node.cpp)
 add_executable(waypoint_manager_node src/waypoint_manager_node.cpp)
 add_executable(navigation_calculator_node src/navigation_calculator_node.cpp)
@@ -52,6 +52,11 @@ install(TARGETS
   navigation_calculator_node
   monitoring_display_node
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install launch files
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
 )
 
 ament_package()

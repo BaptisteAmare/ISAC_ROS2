@@ -2,6 +2,7 @@
 #include "geometry_msgs/msg/point.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "std_msgs/msg/int32.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "navigation_package/msg/waypoint_info.hpp"
 #include "navigation_package/srv/add_waypoint.hpp"
@@ -35,6 +36,7 @@ public:
         waypoint_info_publisher_ = this->create_publisher<navigation_package::msg::WaypointInfo>("navigation/waypoint_info", 10);
         waypoints_remaining_publisher_ = this->create_publisher<std_msgs::msg::Int32>("navigation/remaining_waypoints", 10);
         current_waypoint_publisher_ = this->create_publisher<geometry_msgs::msg::Point>("navigation/current_waypoint", 10);
+        waypoint_json_publisher_ = this->create_publisher<std_msgs::msg::String>("waypoint_json", 10);
 
         distance_subscriber_ = this->create_subscription<std_msgs::msg::Float32>(
             "navigation/distance_to_waypoint", 10, std::bind(&WaypointManagerNode::update_distance, this, std::placeholders::_1));
@@ -55,21 +57,38 @@ private:
         new_waypoint.coordinates = request->point;
         new_waypoint.status = "Waiting";
 
-        // If this is not the first waypoint, calculate the distance and direction to the previous waypoint
+        // Calculer distance et direction si ce n'est pas le premier waypoint
         if (!active_waypoints_.empty()) {
             WaypointInfo& previous_waypoint = active_waypoints_.back();
-            new_waypoint.distance_to_next_waypoint = calculate_distance(previous_waypoint.coordinates.x, previous_waypoint.coordinates.y,
-                                                                            new_waypoint.coordinates.x, new_waypoint.coordinates.y);
-            new_waypoint.direction_to_next_waypoint = calculate_direction(previous_waypoint.coordinates.x, previous_waypoint.coordinates.y,
-                                                                            new_waypoint.coordinates.x, new_waypoint.coordinates.y);
+            new_waypoint.distance_to_next_waypoint = calculate_distance(
+                previous_waypoint.coordinates.x, previous_waypoint.coordinates.y,
+                new_waypoint.coordinates.x, new_waypoint.coordinates.y);
+            new_waypoint.direction_to_next_waypoint = calculate_direction(
+                previous_waypoint.coordinates.x, previous_waypoint.coordinates.y,
+                new_waypoint.coordinates.x, new_waypoint.coordinates.y);
         } else {
-            // For the first waypoint, no distance or direction to calculate, set arbitrarily to 10.
             new_waypoint.distance_to_next_waypoint = 10.0;
             new_waypoint.direction_to_next_waypoint = 10.0;
         }
 
         active_waypoints_.push_back(new_waypoint);
 
+        // Création du message JSON
+        nlohmann::json json_msg;
+        json_msg["index"] = new_waypoint.index;
+        json_msg["coordinates"]["x"] = new_waypoint.coordinates.x;
+        json_msg["coordinates"]["y"] = new_waypoint.coordinates.y;
+        json_msg["coordinates"]["z"] = new_waypoint.coordinates.z;
+        json_msg["distance_to_next_waypoint"] = new_waypoint.distance_to_next_waypoint;
+        json_msg["direction_to_next_waypoint"] = new_waypoint.direction_to_next_waypoint;
+        json_msg["status"] = new_waypoint.status;
+
+        // Publier le message JSON sur le topic "waypoint_json"
+        std_msgs::msg::String json_msg_str;
+        json_msg_str.data = json_msg.dump();
+        waypoint_json_publisher_->publish(json_msg_str);
+
+        // Réponse du service
         response->success = true;
         response->index = new_waypoint.index;
         response->message = "Waypoint added";
@@ -78,15 +97,26 @@ private:
                     new_waypoint.coordinates.z, new_waypoint.index);
 
         update_waypoint_status();
-        // Publish waypoint info after addition
         publish_waypoints_info();
     }
 
+
     void remove_waypoint_by_index_callback(const std::shared_ptr<navigation_package::srv::RemoveWaypoint::Request> request,
-                                           std::shared_ptr<navigation_package::srv::RemoveWaypoint::Response> response)
+                                       std::shared_ptr<navigation_package::srv::RemoveWaypoint::Response> response)
     {
         if (request->index >= 0 && request->index < static_cast<int>(active_waypoints_.size())) {
             active_waypoints_.erase(active_waypoints_.begin() + request->index);
+            
+            // Création du message JSON pour suppression
+            nlohmann::json json_msg;
+            json_msg["index"] = request->index;
+            json_msg["status"] = "Deleted";
+            
+            // Publier le message JSON sur le topic "waypoint_json"
+            std_msgs::msg::String json_msg_str;
+            json_msg_str.data = json_msg.dump();
+            waypoint_json_publisher_->publish(json_msg_str);
+
             response->success = true;
             response->message = "Waypoint Deleted";
         } else {
@@ -96,6 +126,7 @@ private:
 
         publish_waypoints_info();
     }
+
 
     void get_all_waypoints_callback(const std::shared_ptr<navigation_package::srv::GetAllWaypoints::Request> request,
                                 std::shared_ptr<navigation_package::srv::GetAllWaypoints::Response> response)
@@ -169,7 +200,7 @@ private:
             }
 
             // Check distance to see if the waypoint should be marked as done
-            if (waypoint.distance_to_next_waypoint < 1.0) {
+            if (waypoint.distance_to_next_waypoint < 5.0) {
                 waypoint.status = "Done";
                 RCLCPP_INFO(this->get_logger(), "Waypoint %d Done.", waypoint.index);
             }
@@ -223,29 +254,13 @@ private:
         waypoints_remaining_publisher_->publish(remaining_msg);
     }
 
-    void add_sample_waypoint()
-    {
-        geometry_msgs::msg::Point waypoint;
-        waypoint.x = 48.858844;
-        waypoint.y = 2.294351;
-        waypoint.z = 0.0;
-
-        WaypointInfo sample_waypoint;
-        sample_waypoint.index = 0;
-        sample_waypoint.coordinates = waypoint;
-        sample_waypoint.status = "Target";
-
-        active_waypoints_.push_back(sample_waypoint);
-        publish_waypoints_info();
-        update_waypoint_status();
-    }
-
     rclcpp::Service<navigation_package::srv::AddWaypoint>::SharedPtr add_waypoint_service_;
     rclcpp::Service<navigation_package::srv::RemoveWaypoint>::SharedPtr remove_waypoint_by_index_service_;
     rclcpp::Service<navigation_package::srv::GetAllWaypoints>::SharedPtr get_all_waypoints_service_;
     rclcpp::Publisher<navigation_package::msg::WaypointInfo>::SharedPtr waypoint_info_publisher_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr waypoints_remaining_publisher_;
     rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr current_waypoint_publisher_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr waypoint_json_publisher_;
 
     rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr distance_subscriber_;
     rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr direction_subscriber_;

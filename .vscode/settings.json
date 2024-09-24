@@ -9,5 +9,6 @@
         "ranges": "cpp",
         "span": "cpp",
         "regex": "cpp"
-    }
+    },
+    "cmake.ignoreCMakeListsMissing": true
 }
