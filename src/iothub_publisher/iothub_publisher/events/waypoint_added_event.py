@@ -1,6 +1,6 @@
 from datetime import datetime
 from uuid import UUID
-from events.waypoint import Waypoint
+from iothub_publisher.events.waypoint import Waypoint
 
 class WaypointAddedEvent:
     def __init__(self, mission_id: UUID, added_at: datetime, waypoint: Waypoint):
