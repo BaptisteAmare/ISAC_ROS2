@@ -102,6 +102,8 @@ private:
             current_mission_id = generate_uuid();
             std::string current_time = get_current_time_iso8601();
 
+            json_msg["mission_id"] = current_mission_id;
+
             mission_created_msg["mission_id"] = current_mission_id;
             mission_created_msg["mission_name"] = "Test Mission";
             mission_created_msg["created_at"] = current_time;
