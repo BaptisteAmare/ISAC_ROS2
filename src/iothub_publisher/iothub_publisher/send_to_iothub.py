@@ -6,6 +6,7 @@ from iothub_publisher.events.mission_created_event import MissionCreatedEvent
 from iothub_publisher.events.mission_completed_event import MissionCompletedEvent
 from iothub_publisher.events.waypoint_added_event import WaypointAddedEvent
 from iothub_publisher.events.waypoint_removed_event import WaypointRemovedEvent
+from iothub_publisher.cloud_event import CloudEvent
 from datetime import datetime
 import json
 
@@ -46,9 +47,10 @@ class IoTNode(Node):
                 "created_at": mission_event.created_at.isoformat(),
                 "first_waypoint": mission_event.first_waypoint
             }
+            cloud_event = CloudEvent(event_type="mission_created", source="/ros2/iot_node", data=message_dict)
 
             # Send the message as JSON
-            message = Message(json.dumps(message_dict))
+            message = Message(json.dumps(cloud_event.to_dict()))
             self.client.send_message(message)
             self.get_logger().info(f"MissionCreatedEvent sent to IoT Hub: {message_dict}")
         except KeyError as e:
@@ -73,9 +75,10 @@ class IoTNode(Node):
                 "mission_id": mission_event.mission_id,
                 "completed_at": mission_event.completed_at.isoformat(),
             }
+            cloud_event = CloudEvent(event_type="mission_completed", source="/ros2/iot_node", data=message_dict)
 
             # Send the message as JSON
-            message = Message(json.dumps(message_dict))
+            message = Message(json.dumps(cloud_event.to_dict()))
             self.client.send_message(message)
             self.get_logger().info(f"MissionCompletedEvent sent to IoT Hub: {message_dict}")
         except Exception as e:
@@ -100,9 +103,11 @@ class IoTNode(Node):
                 "added_at": waypoint_event.added_at.isoformat(),
                 "waypoint_info":waypoint_event.waypoint,
             }
-            
+
+            cloud_event = CloudEvent(event_type="waypoint_added", source="/ros2/iot_node", data=message_dict)
+
             # Send the message as JSON
-            message = Message(json.dumps(message_dict))
+            message = Message(json.dumps(cloud_event.to_dict()))
             self.client.send_message(message)
             self.get_logger().info(f"WaypointAddedEvent sent to IoT Hub: {message_dict}")
         except Exception as e:
@@ -126,9 +131,10 @@ class IoTNode(Node):
                 "waypoint_id": waypoint_event.waypoint_id,
                 "removed_at":waypoint_event.removed_at,
             }
+            cloud_event = CloudEvent(event_type="waypoint_removed", source="/ros2/iot_node", data=message_dict)
 
-            # Convert the event to a dictionary and send as a JSON message
-            message = Message(json.dumps(message_dict))
+            # Send the message as JSON
+            message = Message(json.dumps(cloud_event.to_dict()))
             self.client.send_message(message)
             self.get_logger().info(f"WaypointRemovedEvent sent to IoT Hub: {message_dict}")
         except Exception as e:
