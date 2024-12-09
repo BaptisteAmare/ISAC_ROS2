@@ -24,17 +24,20 @@ add_executable(gps_tracker_node src/gps_tracker_node.cpp)
 add_executable(waypoint_manager_node src/waypoint_manager_node.cpp)
 add_executable(navigation_calculator_node src/navigation_calculator_node.cpp)
 add_executable(monitoring_display_node src/monitoring_display_node.cpp)
+add_executable(condensed_mission_info_node src/condensed_mission_info.cpp)
 
 # Add dependencies for each target
 ament_target_dependencies(gps_tracker_node rclcpp std_msgs geometry_msgs)
 ament_target_dependencies(waypoint_manager_node rclcpp std_srvs std_msgs geometry_msgs nlohmann_json)
 ament_target_dependencies(navigation_calculator_node rclcpp std_msgs geometry_msgs)
 ament_target_dependencies(monitoring_display_node rclcpp std_msgs geometry_msgs nlohmann_json)
+ament_target_dependencies(condensed_mission_info_node rclcpp std_msgs geometry_msgs nlohmann_json)
 
 # Generate ROSIDL interfaces and link them with appropriate targets
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/AddWaypoint.srv"
   "srv/RemoveWaypoint.srv"
+  "srv/RemoveWaypointId.srv"
   "srv/GetAllWaypoints.srv"
   "msg/WaypointInfo.msg"
   DEPENDENCIES geometry_msgs std_msgs
@@ -51,6 +54,7 @@ install(TARGETS
   waypoint_manager_node
   navigation_calculator_node
   monitoring_display_node
+  condensed_mission_info_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
